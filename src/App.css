@@ -123,6 +123,8 @@
   width: 100%;
   height: auto;
   font-family: inherit;
+  cursor: crosshair;
+  user-select: none;
 }
 
 .chart-tooltip {
@@ -136,6 +138,80 @@
   min-width: 160px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   z-index: 10;
+}
+
+.chart-tooltip.unified {
+  min-width: 260px;
+  padding: 0.5rem 0.6rem;
+}
+
+.chart-tooltip.unified .tt-aid {
+  font-size: 0.78rem;
+  color: #eee;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.tt-rows {
+  display: grid;
+  grid-template-columns: 10px 1fr auto auto;
+  gap: 0.25rem 0.55rem;
+  align-items: center;
+}
+
+.tt-runner-row {
+  display: contents;
+}
+
+.tt-runner-row > .swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.tt-runner-row > .swatch.swatch-ref {
+  background: transparent;
+  border-top: 2px solid #888;
+  height: 0;
+  border-radius: 0;
+}
+
+.tt-runner-name {
+  color: #ddd;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 18ch;
+}
+
+.tt-runner-row.ref .tt-runner-name {
+  color: #aaa;
+  font-style: italic;
+}
+
+.tt-time {
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.75rem;
+}
+
+.tt-delta {
+  color: #aaa;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.75rem;
+  min-width: 5ch;
+  text-align: right;
+}
+
+.tt-delta.pos {
+  color: #4ade80;
+  font-weight: 600;
+}
+
+.tt-delta.neg {
+  color: #f87171;
 }
 
 .chart-tooltip .tt-name {

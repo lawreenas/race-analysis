@@ -15,8 +15,6 @@ const COLORS = [
   '#e879f9',
 ]
 
-type Hover = { runnerBib: string; aidIdx: number } | null
-
 type Props = {
   runners: Runner[]
   selected: Set<string>
@@ -44,8 +42,9 @@ function niceTimeStep(approx: number): number {
 export function AidStationChart({ runners, selected }: Props) {
   const tom = runners.find((r) => r.rank === 1)
   const wrapRef = useRef<HTMLDivElement>(null)
+  const svgRef = useRef<SVGSVGElement>(null)
   const [width, setWidth] = useState(1200)
-  const [hover, setHover] = useState<Hover>(null)
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
   const [elevation, setElevation] = useState<ElevationPoint[]>([])
 
   useEffect(() => {
@@ -105,8 +104,8 @@ export function AidStationChart({ runners, selected }: Props) {
   minDelta -= range * 0.08
   maxDelta += range * 0.08
 
-  const height = 380
-  const m = { top: 16, right: 60, bottom: 110, left: 70 }
+  const height = 400
+  const m = { top: 16, right: 60, bottom: 120, left: 70 }
   const innerW = width - m.left - m.right
   const innerH = height - m.top - m.bottom
   const innerBottom = m.top + innerH
@@ -151,58 +150,112 @@ export function AidStationChart({ runners, selected }: Props) {
 
   const empty = selectedRunners.length === 0 && !tomSelected
 
-  let tooltip: {
-    x: number
-    y: number
+  function handleMouseMove(e: React.MouseEvent<SVGSVGElement>) {
+    if (empty) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    if (rect.width === 0) return
+    const scaleX = width / rect.width
+    const svgX = (e.clientX - rect.left) * scaleX
+    if (svgX < m.left - 6 || svgX > width - m.right + 6) {
+      setHoveredIdx(null)
+      return
+    }
+    let nearest = 0
+    let nearestD = Infinity
+    for (let i = 0; i < aidStations.length; i++) {
+      const dx = Math.abs(xPos(aidStations[i].distanceKm) - svgX)
+      if (dx < nearestD) {
+        nearestD = dx
+        nearest = i
+      }
+    }
+    setHoveredIdx(nearest)
+  }
+
+  function handleMouseLeave() {
+    setHoveredIdx(null)
+  }
+
+  type TooltipRow = {
+    bib: string
     name: string
-    aid: string
+    color: string | null
     abs: string
     delta: number
-    color: string
+    isRef: boolean
+  }
+  let tooltip: {
+    cssLeft: number
+    cssTop: number
+    aidName: string
+    aidKm: number
+    rows: TooltipRow[]
+    flip: boolean
   } | null = null
-  if (hover) {
-    const s = series.find((ss) => ss.runner.bib === hover.runnerBib)
-    const p = s?.points.find((pp) => pp.idx === hover.aidIdx)
-    const a = aidStations[hover.aidIdx]
-    if (s && p && a) {
-      tooltip = {
-        x: xPos(p.distanceKm),
-        y: yPos(p.delta),
+
+  if (hoveredIdx !== null) {
+    const a = aidStations[hoveredIdx]
+    const tomSplit = tom.splits[hoveredIdx]
+    const rows: TooltipRow[] = []
+    rows.push({
+      bib: tom.bib,
+      name: `${tom.firstName} ${tom.lastName}`,
+      color: null,
+      abs: tomSplit.timeStr,
+      delta: 0,
+      isRef: true,
+    })
+    for (const s of series) {
+      const p = s.points.find((pp) => pp.idx === hoveredIdx)
+      if (!p) continue
+      rows.push({
+        bib: s.runner.bib,
         name: `${s.runner.firstName} ${s.runner.lastName}`,
-        aid: `${a.name} · ${a.distanceKm.toFixed(1)} km`,
+        color: s.color,
         abs: p.timeStr,
         delta: p.delta,
-        color: s.color,
-      }
+        isRef: false,
+      })
+    }
+    rows.sort((x, y) => x.delta - y.delta)
+
+    const svg = svgRef.current
+    const wrap = wrapRef.current
+    let cssLeft = 0
+    let cssTop = 0
+    let flip = false
+    if (svg && wrap) {
+      const svgRect = svg.getBoundingClientRect()
+      const wrapRect = wrap.getBoundingClientRect()
+      const scale = svgRect.width / width
+      const xInSvg = xPos(a.distanceKm) * scale
+      const offsetLeft = svgRect.left - wrapRect.left
+      const offsetTop = svgRect.top - wrapRect.top
+      flip = a.distanceKm / lastKm > 0.55
+      cssLeft = flip ? offsetLeft + xInSvg - 12 : offsetLeft + xInSvg + 12
+      cssTop = offsetTop + m.top * scale + 4
+    }
+    tooltip = {
+      cssLeft,
+      cssTop,
+      aidName: a.name,
+      aidKm: a.distanceKm,
+      rows,
+      flip,
     }
   }
 
   return (
     <div ref={wrapRef} className="chart-wrap">
-      <svg width={width} height={height} className="chart-svg">
-        {elevAreaPath && (
-          <>
-            <path d={elevAreaPath} fill="#1c2a1f" opacity={0.9} />
-            <path
-              d={elevAreaPath.replace(/^M [^ ]+ [^ ]+ /, 'M ').replace(/ L [^ ]+ [^ ]+ Z$/, '')}
-              fill="none"
-              stroke="#3f5a44"
-              strokeWidth={1}
-            />
-          </>
-        )}
-
-        {aidStations.map((a, i) => (
-          <line
-            key={`vline-${i}`}
-            x1={xPos(a.distanceKm)}
-            x2={xPos(a.distanceKm)}
-            y1={m.top}
-            y2={innerBottom}
-            stroke="#262626"
-            strokeDasharray="1,3"
-          />
-        ))}
+      <svg
+        ref={svgRef}
+        width={width}
+        height={height}
+        className="chart-svg"
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+      >
+        {elevAreaPath && <path d={elevAreaPath} fill="#1c2a1f" opacity={0.9} />}
 
         {yTicks.map((t) => {
           const isZero = Math.abs(t) < 1e-9
@@ -242,13 +295,45 @@ export function AidStationChart({ runners, selected }: Props) {
           </text>
         ))}
 
-        <text
-          x={m.left - 8}
-          y={m.top - 4}
-          textAnchor="end"
-          fill="#888"
-          fontSize="10"
-        >
+        <line
+          x1={m.left}
+          x2={width - m.right}
+          y1={innerBottom}
+          y2={innerBottom}
+          stroke="#444"
+        />
+
+        {aidStations.map((a, i) => {
+          const x = xPos(a.distanceKm)
+          const isHovered = hoveredIdx === i
+          return (
+            <g key={`xt-${i}`}>
+              <line
+                x1={x}
+                x2={x}
+                y1={innerBottom}
+                y2={innerBottom + 5}
+                stroke={isHovered ? '#aaa' : '#555'}
+                strokeWidth={isHovered ? 1.5 : 1}
+              />
+            </g>
+          )
+        })}
+
+        {hoveredIdx !== null && (
+          <line
+            x1={xPos(aidStations[hoveredIdx].distanceKm)}
+            x2={xPos(aidStations[hoveredIdx].distanceKm)}
+            y1={m.top}
+            y2={innerBottom}
+            stroke="#888"
+            strokeDasharray="4,3"
+            strokeWidth={1}
+            pointerEvents="none"
+          />
+        )}
+
+        <text x={m.left - 8} y={m.top - 4} textAnchor="end" fill="#888" fontSize="10">
           vs Tom
         </text>
         <text
@@ -261,15 +346,23 @@ export function AidStationChart({ runners, selected }: Props) {
           elev
         </text>
 
-        {aidStations.map((a, i) => (
-          <g key={`xl-${i}`} transform={`translate(${xPos(a.distanceKm)}, ${innerBottom + 8})`}>
-            <g transform="rotate(45)">
-              <text fill="#888" fontSize="10" textAnchor="start">
-                {a.name} ({a.distanceKm.toFixed(1)} km)
-              </text>
+        {aidStations.map((a, i) => {
+          const isHovered = hoveredIdx === i
+          return (
+            <g key={`xl-${i}`} transform={`translate(${xPos(a.distanceKm)}, ${innerBottom + 10})`}>
+              <g transform="rotate(45)">
+                <text
+                  fill={isHovered ? '#e5e5e5' : '#888'}
+                  fontSize="10"
+                  fontWeight={isHovered ? 600 : 400}
+                  textAnchor="start"
+                >
+                  {a.name} ({a.distanceKm.toFixed(1)} km)
+                </text>
+              </g>
             </g>
-          </g>
-        ))}
+          )
+        })}
 
         {series.map(({ runner, points, color }) => {
           if (points.length === 0) return null
@@ -278,22 +371,25 @@ export function AidStationChart({ runners, selected }: Props) {
             .join(' ')
           return (
             <g key={runner.bib}>
-              <path d={d} fill="none" stroke={color} strokeWidth={2} />
+              <path
+                d={d}
+                fill="none"
+                stroke={color}
+                strokeWidth={2}
+                pointerEvents="none"
+              />
               {points.map((p) => {
-                const isHovered =
-                  hover?.runnerBib === runner.bib && hover.aidIdx === p.idx
+                const isHovered = hoveredIdx === p.idx
                 return (
                   <circle
                     key={p.idx}
                     cx={xPos(p.distanceKm)}
                     cy={yPos(p.delta)}
-                    r={isHovered ? 5 : 3}
+                    r={isHovered ? 5.5 : 3}
                     fill={color}
                     stroke={isHovered ? '#fff' : 'none'}
                     strokeWidth={1.5}
-                    onMouseEnter={() => setHover({ runnerBib: runner.bib, aidIdx: p.idx })}
-                    onMouseLeave={() => setHover(null)}
-                    style={{ cursor: 'crosshair' }}
+                    pointerEvents="none"
                   />
                 )
               })}
@@ -311,21 +407,34 @@ export function AidStationChart({ runners, selected }: Props) {
 
       {tooltip && (
         <div
-          className="chart-tooltip"
+          className="chart-tooltip unified"
           style={{
-            left: Math.min(tooltip.x + 12, width - 200),
-            top: tooltip.y + 12,
+            left: tooltip.cssLeft,
+            top: tooltip.cssTop,
+            transform: tooltip.flip ? 'translateX(-100%)' : undefined,
           }}
         >
-          <div className="tt-name" style={{ color: tooltip.color }}>
-            {tooltip.name}
+          <div className="tt-aid">
+            {tooltip.aidName} · {tooltip.aidKm.toFixed(1)} km
           </div>
-          <div className="tt-aid">{tooltip.aid}</div>
-          <div className="tt-row">
-            Time <strong>{tooltip.abs}</strong>
-          </div>
-          <div className="tt-row">
-            vs Tom <strong>{formatDelta(tooltip.delta)}</strong>
+          <div className="tt-rows">
+            {tooltip.rows.map((r) => (
+              <div key={r.bib} className={`tt-runner-row ${r.isRef ? 'ref' : ''}`}>
+                <span
+                  className={`swatch ${r.isRef ? 'swatch-ref' : ''}`}
+                  style={r.isRef || !r.color ? undefined : { background: r.color }}
+                />
+                <span className="tt-runner-name">{r.name}</span>
+                <span className="tt-time">{r.abs || '—'}</span>
+                <span
+                  className={`tt-delta ${
+                    r.isRef ? '' : r.delta > 0 ? 'neg' : r.delta < 0 ? 'pos' : ''
+                  }`}
+                >
+                  {r.isRef ? 'ref' : formatDelta(r.delta)}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       )}
