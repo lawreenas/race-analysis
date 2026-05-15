@@ -75,9 +75,11 @@ export function parseRunners(csvText: string): Runner[] {
 
   const referenceRow = rows.find((r) => Number(r.row.rank) === 1) ?? rows[0]
   const referenceSegments = computeSegments(referenceRow.splitSeconds)
+  const leaderRaceScore = numOrNull(referenceRow.row.race_score)
 
   return rows.map(({ row, splitSeconds }) => {
     const segments = computeSegments(splitSeconds)
+    const runnerRaceScore = numOrNull(row.race_score)
     const splits: Split[] = aidCols.map((a, idx) => {
       const seconds = splitSeconds[idx]
       const segmentSeconds = segments[idx]
@@ -88,6 +90,14 @@ export function parseRunners(csvText: string): Runner[] {
         segmentSeconds !== null && refSeg !== null && refSeg > 0
           ? ((segmentSeconds - refSeg) / refSeg) * 100
           : null
+      const segmentScoreDeltaVsOwn =
+        segmentSeconds !== null &&
+        segmentSeconds > 0 &&
+        refSeg !== null &&
+        leaderRaceScore !== null &&
+        runnerRaceScore !== null
+          ? (refSeg / segmentSeconds) * leaderRaceScore - runnerRaceScore
+          : null
       return {
         name: a.name,
         distanceKm: a.distanceKm,
@@ -96,6 +106,7 @@ export function parseRunners(csvText: string): Runner[] {
         segmentSeconds,
         segmentDeltaVsLeaderSeconds,
         segmentPctVsLeader,
+        segmentScoreDeltaVsOwn,
       }
     })
 

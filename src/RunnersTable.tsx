@@ -1,6 +1,6 @@
 import type { Runner, Split } from './types'
 
-export type DeltaMode = 'time' | 'percent'
+export type DeltaMode = 'time' | 'percent' | 'score'
 
 type Props = {
   runners: Runner[]
@@ -48,17 +48,37 @@ function formatPercent(p: number | null): string {
   return `${p > 0 ? '+' : ''}${p.toFixed(1)}%`
 }
 
+function formatScore(s: number | null): string {
+  if (s === null) return '—'
+  if (Math.abs(s) < 0.05) return '0'
+  return `${s > 0 ? '+' : ''}${s.toFixed(1)}`
+}
+
+function scoreClass(d: number | null, threshold: number): string {
+  if (d === null) return ''
+  // For score: positive = above own race score (good) → green
+  if (d > threshold) return 'pct-better'
+  if (d < -threshold) return 'pct-worse'
+  return ''
+}
+
 function SplitCell({ split, deltaMode }: { split: Split; deltaMode: DeltaMode }) {
-  const showPercent = deltaMode === 'percent'
-  const deltaValue = showPercent ? split.segmentPctVsLeader : split.segmentDeltaVsLeaderSeconds
-  const deltaText = showPercent
-    ? formatPercent(split.segmentPctVsLeader)
-    : formatDelta(split.segmentDeltaVsLeaderSeconds)
-  const threshold = showPercent ? 0.1 : 1
+  let deltaText = ''
+  let cls = ''
+  if (deltaMode === 'percent') {
+    deltaText = formatPercent(split.segmentPctVsLeader)
+    cls = deltaClass(split.segmentPctVsLeader, 0.1)
+  } else if (deltaMode === 'time') {
+    deltaText = formatDelta(split.segmentDeltaVsLeaderSeconds)
+    cls = deltaClass(split.segmentDeltaVsLeaderSeconds, 1)
+  } else {
+    deltaText = formatScore(split.segmentScoreDeltaVsOwn)
+    cls = scoreClass(split.segmentScoreDeltaVsOwn, 0.5)
+  }
   return (
     <td className="split-cell">
       <div className="split-time">{formatDuration(split.segmentSeconds)}</div>
-      <div className={`split-pct ${deltaClass(deltaValue, threshold)}`}>{deltaText}</div>
+      <div className={`split-pct ${cls}`}>{deltaText}</div>
     </td>
   )
 }
