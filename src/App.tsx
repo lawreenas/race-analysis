@@ -1,22 +1,31 @@
 import { useCallback, useEffect, useState } from 'react'
 import './App.css'
-import { loadRunners } from './loadRunners'
+import {
+  clearStoredRaceData,
+  getLeader,
+  loadDefaultRaceData,
+  loadStoredRaceData,
+  storeRaceData,
+} from './raceData'
 import { RunnersTable } from './RunnersTable'
 import { AidStationChart } from './AidStationChart'
-import type { Runner } from './types'
+import { DataPage } from './DataPage'
+import type { RaceData } from './types'
 
-const STORAGE_KEY = 'utmb-selected-bibs'
+const SELECTED_KEY = 'selected-bibs-v1'
 
-type Page = 'table' | 'analysis'
+type Page = 'table' | 'analysis' | 'data'
 
 function pageFromHash(): Page {
   const h = window.location.hash.replace(/^#\/?/, '')
-  return h === 'analysis' || h === 'analysis' ? 'analysis' : 'table'
+  if (h === 'analysis' || h === 'chart') return 'analysis'
+  if (h === 'data') return 'data'
+  return 'table'
 }
 
 function readSelected(): Set<string> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = localStorage.getItem(SELECTED_KEY)
     if (!raw) return new Set()
     const arr = JSON.parse(raw)
     return new Set(Array.isArray(arr) ? (arr as string[]) : [])
@@ -26,21 +35,27 @@ function readSelected(): Set<string> {
 }
 
 function App() {
-  const [runners, setRunners] = useState<Runner[]>([])
+  const [raceData, setRaceData] = useState<RaceData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<Set<string>>(() => readSelected())
   const [page, setPage] = useState<Page>(pageFromHash)
 
   useEffect(() => {
-    loadRunners()
-      .then(setRunners)
-      .catch((e) => setError(String(e)))
+    const stored = loadStoredRaceData()
+    if (stored && stored.runners && stored.runners.length > 0) {
+      setRaceData(stored)
+      setLoading(false)
+      return
+    }
+    loadDefaultRaceData()
+      .then(setRaceData)
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false))
   }, [])
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([...selected]))
+    localStorage.setItem(SELECTED_KEY, JSON.stringify([...selected]))
   }, [selected])
 
   useEffect(() => {
@@ -64,13 +79,41 @@ function App() {
     window.location.hash = `#/${p}`
   }
 
-  const outperformedCount = runners.filter((r) => r.raceScore > r.utmbIndexRaceDay).length
+  const handleApplyData = (data: RaceData) => {
+    setRaceData(data)
+    setSelected(new Set())
+    storeRaceData(data)
+    navigate('table')
+  }
+
+  const handleResetData = () => {
+    clearStoredRaceData()
+    setSelected(new Set())
+    setLoading(true)
+    setError(null)
+    loadDefaultRaceData()
+      .then(setRaceData)
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLoading(false))
+  }
+
+  const runners = raceData?.runners ?? []
+  const leader = getLeader(runners)
+  const outperformedCount = runners.filter(
+    (r) =>
+      r.raceScore !== null &&
+      r.utmbIndexRaceDay !== null &&
+      r.raceScore > r.utmbIndexRaceDay,
+  ).length
+  const showOutperformedStat = runners.some(
+    (r) => r.raceScore !== null && r.utmbIndexRaceDay !== null,
+  )
 
   return (
     <div className="app">
       <header className="app-header">
         <div className="header-top">
-          <h1>UTMB 2025 — Performance Analysis</h1>
+          <h1>{raceData ? `${raceData.raceName} — Race Analysis` : 'Race Analysis'}</h1>
           <nav className="page-nav">
             <button
               className={`nav-btn ${page === 'table' ? 'active' : ''}`}
@@ -84,16 +127,28 @@ function App() {
             >
               Analysis
             </button>
+            <button
+              className={`nav-btn ${page === 'data' ? 'active' : ''}`}
+              onClick={() => navigate('data')}
+            >
+              Data
+            </button>
           </nav>
         </div>
         <p className="subtitle">
-          {page === 'table'
-            ? 'Top 100 — checkpoint % is gap vs Tom EVANS (1st place). Rows highlighted in green outperformed their race-day UTMB index. Click a row to mark a runner.'
-            : 'Time delta vs Tom EVANS at each aid station for selected runners. Hover a point for the absolute time.'}
-          {runners.length > 0 && page === 'table' && (
+          {page === 'table' &&
+            (leader
+              ? `Δ on each segment is vs ${leader.firstName} ${leader.lastName} (1st place). Click a row to mark a runner.`
+              : 'Click a row to mark a runner.')}
+          {page === 'analysis' &&
+            (leader
+              ? `Time delta vs ${leader.firstName} ${leader.lastName} (1st place) at each aid station. Hover for absolute times.`
+              : 'Time delta vs 1st place at each aid station. Hover for absolute times.')}
+          {page === 'data' && 'Load a different race by uploading its files.'}
+          {runners.length > 0 && page === 'table' && showOutperformedStat && (
             <> · {outperformedCount}/{runners.length} outperformed</>
           )}
-          {selected.size > 0 && (
+          {selected.size > 0 && page !== 'data' && (
             <>
               {' · '}
               <span className="selected-pill">{selected.size} selected</span>{' '}
@@ -107,11 +162,22 @@ function App() {
       <main className="app-main">
         {loading && <p className="placeholder">Loading…</p>}
         {error && <p className="error">{error}</p>}
-        {!loading && !error && page === 'table' && (
-          <RunnersTable runners={runners} selected={selected} onToggle={toggleSelected} />
+        {!loading && !error && raceData && page === 'table' && (
+          <RunnersTable
+            runners={runners}
+            selected={selected}
+            onToggle={toggleSelected}
+          />
         )}
-        {!loading && !error && page === 'analysis' && (
-          <AidStationChart runners={runners} selected={selected} />
+        {!loading && !error && raceData && page === 'analysis' && (
+          <AidStationChart raceData={raceData} selected={selected} />
+        )}
+        {!loading && !error && raceData && page === 'data' && (
+          <DataPage
+            raceData={raceData}
+            onApply={handleApplyData}
+            onReset={handleResetData}
+          />
         )}
       </main>
     </div>

@@ -6,7 +6,8 @@ type Props = {
   onToggle: (bib: string) => void
 }
 
-function diff(runner: Runner) {
+function runnerScoreDiff(runner: Runner): number | null {
+  if (runner.raceScore === null || runner.utmbIndexRaceDay === null) return null
   return runner.raceScore - runner.utmbIndexRaceDay
 }
 
@@ -42,8 +43,8 @@ function SplitCell({ split }: { split: Split }) {
   return (
     <td className="split-cell">
       <div className="split-time">{formatDuration(split.segmentSeconds)}</div>
-      <div className={`split-pct ${deltaClass(split.segmentDeltaVsTomSeconds)}`}>
-        {formatDelta(split.segmentDeltaVsTomSeconds)}
+      <div className={`split-pct ${deltaClass(split.segmentDeltaVsLeaderSeconds)}`}>
+        {formatDelta(split.segmentDeltaVsLeaderSeconds)}
       </div>
     </td>
   )
@@ -51,6 +52,9 @@ function SplitCell({ split }: { split: Split }) {
 
 export function RunnersTable({ runners, selected, onToggle }: Props) {
   const splitHeaders = runners[0]?.splits ?? []
+  const showUtmbCols = runners.some(
+    (r) => r.raceScore !== null && r.utmbIndexRaceDay !== null,
+  )
 
   return (
     <div className="runners-table-wrap">
@@ -59,9 +63,9 @@ export function RunnersTable({ runners, selected, onToggle }: Props) {
           <tr>
             <th>Rank</th>
             <th className="name-col">Name</th>
-            <th>UTMB index (race day)</th>
-            <th>Race score</th>
-            <th>Δ</th>
+            {showUtmbCols && <th>UTMB index (race day)</th>}
+            {showUtmbCols && <th>Race score</th>}
+            {showUtmbCols && <th>Δ</th>}
             {splitHeaders.map((s, i) => (
               <th key={i} className="split-header">
                 <div>{s.name}</div>
@@ -72,8 +76,8 @@ export function RunnersTable({ runners, selected, onToggle }: Props) {
         </thead>
         <tbody>
           {runners.map((r) => {
-            const d = diff(r)
-            const outperformed = d > 0
+            const d = runnerScoreDiff(r)
+            const outperformed = d !== null && d > 0
             const isSelected = selected.has(r.bib)
             const cls = [outperformed ? 'outperformed' : '', isSelected ? 'selected' : '']
               .filter(Boolean)
@@ -93,14 +97,20 @@ export function RunnersTable({ runners, selected, onToggle }: Props) {
                     {r.firstName} <span className="last">{r.lastName}</span>
                   </div>
                   <div className="name-meta">
-                    {r.sex} · {r.category} · {r.totalTime}
+                    {[r.sex, r.category, r.totalTime].filter(Boolean).join(' · ')}
                   </div>
                 </td>
-                <td className="num">{r.utmbIndexRaceDay}</td>
-                <td className="num">{r.raceScore}</td>
-                <td className={`num delta ${outperformed ? 'pos' : d < 0 ? 'neg' : ''}`}>
-                  {d > 0 ? `+${d}` : d}
-                </td>
+                {showUtmbCols && <td className="num">{r.utmbIndexRaceDay ?? '—'}</td>}
+                {showUtmbCols && <td className="num">{r.raceScore ?? '—'}</td>}
+                {showUtmbCols && (
+                  <td
+                    className={`num delta ${
+                      d === null ? '' : outperformed ? 'pos' : d < 0 ? 'neg' : ''
+                    }`}
+                  >
+                    {d === null ? '—' : d > 0 ? `+${d}` : d}
+                  </td>
+                )}
                 {r.splits.map((s, i) => (
                   <SplitCell key={i} split={s} />
                 ))}

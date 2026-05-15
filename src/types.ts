@@ -4,7 +4,7 @@ export type Split = {
   timeStr: string
   seconds: number | null
   segmentSeconds: number | null
-  segmentDeltaVsTomSeconds: number | null
+  segmentDeltaVsLeaderSeconds: number | null
 }
 
 export type Runner = {
@@ -17,8 +17,30 @@ export type Runner = {
   category: string
   club: string
   totalTime: string
-  utmbIndexRaceDay: number
-  raceScore: number
-  currentUtmbIndex: number
+  // Optional UTMB-specific fields. Absent in races that don't track these.
+  utmbIndexRaceDay: number | null
+  raceScore: number | null
+  currentUtmbIndex: number | null
   splits: Split[]
+}
+
+export type ElevationPoint = {
+  distanceKm: number
+  elevationM: number
+}
+
+export type AidStationInfo = {
+  name: string
+  distanceKm: number
+  type?: string
+  elevationM?: number
+  gainFromPrevM?: number
+  lossFromPrevM?: number
+}
+
+export type RaceData = {
+  raceName: string
+  runners: Runner[]
+  elevation: ElevationPoint[]
+  aidStations: AidStationInfo[]
 }

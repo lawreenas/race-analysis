@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Runner } from './types'
-import { loadElevationProfile, type ElevationPoint } from './loadElevation'
+import type { RaceData } from './types'
+import { getLeader } from './raceData'
 
 const COLORS = [
   '#60a5fa',
@@ -16,7 +16,7 @@ const COLORS = [
 ]
 
 type Props = {
-  runners: Runner[]
+  raceData: RaceData
   selected: Set<string>
 }
 
@@ -39,19 +39,13 @@ function niceTimeStep(approx: number): number {
   return steps[steps.length - 1]
 }
 
-export function AidStationChart({ runners, selected }: Props) {
-  const tom = runners.find((r) => r.rank === 1)
+export function AidStationChart({ raceData, selected }: Props) {
+  const { runners, elevation } = raceData
+  const leader = getLeader(runners)
   const wrapRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const [width, setWidth] = useState(1200)
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
-  const [elevation, setElevation] = useState<ElevationPoint[]>([])
-
-  useEffect(() => {
-    loadElevationProfile()
-      .then(setElevation)
-      .catch((e) => console.warn('Elevation load failed:', e))
-  }, [])
 
   useEffect(() => {
     if (!wrapRef.current) return
@@ -63,25 +57,25 @@ export function AidStationChart({ runners, selected }: Props) {
     return () => ro.disconnect()
   }, [])
 
-  if (!tom) {
+  if (!leader) {
     return <div ref={wrapRef} className="chart-wrap" />
   }
 
-  const aidStations = tom.splits
-  const selectedRunners = runners.filter((r) => selected.has(r.bib) && r.bib !== tom.bib)
-  const tomSelected = selected.has(tom.bib)
+  const aidStations = leader.splits
+  const selectedRunners = runners.filter((r) => selected.has(r.bib) && r.bib !== leader.bib)
+  const leaderSelected = selected.has(leader.bib)
   const lastKm = aidStations.length > 0 ? aidStations[aidStations.length - 1].distanceKm : 175
 
   const series = selectedRunners.map((r, idx) => {
     const points = r.splits
       .map((s, i) => {
-        const tomSec = aidStations[i]?.seconds ?? null
+        const leaderSec = aidStations[i]?.seconds ?? null
         const runnerSec = s.seconds
-        if (tomSec === null || runnerSec === null) return null
+        if (leaderSec === null || runnerSec === null) return null
         return {
           idx: i,
           distanceKm: s.distanceKm,
-          delta: runnerSec - tomSec,
+          delta: runnerSec - leaderSec,
           timeStr: s.timeStr,
         }
       })
@@ -148,7 +142,7 @@ export function AidStationChart({ runners, selected }: Props) {
     for (let v = start; v <= elevMax; v += elevTickStep) elevTicks.push(v)
   }
 
-  const empty = selectedRunners.length === 0 && !tomSelected
+  const empty = selectedRunners.length === 0 && !leaderSelected
 
   function handleMouseMove(e: React.MouseEvent<SVGSVGElement>) {
     if (empty) return
@@ -195,13 +189,13 @@ export function AidStationChart({ runners, selected }: Props) {
 
   if (hoveredIdx !== null) {
     const a = aidStations[hoveredIdx]
-    const tomSplit = tom.splits[hoveredIdx]
+    const leaderSplit = leader.splits[hoveredIdx]
     const rows: TooltipRow[] = []
     rows.push({
-      bib: tom.bib,
-      name: `${tom.firstName} ${tom.lastName}`,
+      bib: leader.bib,
+      name: `${leader.firstName} ${leader.lastName}`,
       color: null,
-      abs: tomSplit.timeStr,
+      abs: leaderSplit.timeStr,
       delta: 0,
       isRef: true,
     })
@@ -334,7 +328,7 @@ export function AidStationChart({ runners, selected }: Props) {
         )}
 
         <text x={m.left - 8} y={m.top - 4} textAnchor="end" fill="#888" fontSize="10">
-          vs Tom
+          vs 1st
         </text>
         <text
           x={width - m.right + 6}
@@ -400,8 +394,8 @@ export function AidStationChart({ runners, selected }: Props) {
 
       {empty && (
         <div className="chart-empty-overlay">
-          Select runners (click on a row in the Table page) to plot their time delta vs Tom EVANS
-          at each aid station.
+          Select runners (click a row on the Table page) to plot their time delta vs{' '}
+          {leader.firstName} {leader.lastName} (1st place) at each aid station.
         </div>
       )}
 
@@ -442,7 +436,7 @@ export function AidStationChart({ runners, selected }: Props) {
       <div className="chart-legend">
         <span className="legend-item">
           <span className="swatch swatch-ref" />
-          Tom EVANS (reference)
+          {leader.firstName} {leader.lastName} (reference)
         </span>
         <span className="legend-item">
           <span className="swatch swatch-elev" />
