@@ -1,0 +1,17 @@
+name,type,distance_km,elevation_m,gain_from_prev_m,loss_from_prev_m
+Chamonix (Start),start,0.0,1035,0,0
+Les Houches,refreshment,8.0,1007,50,80
+Saint-Gervais,aid,21.0,807,820,1020
+Les Contamines,aid (reinforced 2025),31.0,1163,375,20
+Les Chapieux,life base,52.0,1554,1450,1060
+Lac Combal,refreshment,72.0,1969,1100,680
+Col Checrouit (Maison Vieille),refreshment,80.0,1956,520,520
+Courmayeur,life base,84.0,1191,10,775
+Refuge Bertone,refreshment,89.0,1989,810,10
+Arnouvaz,aid,102.0,1769,300,520
+La Fouly,aid,116.0,1593,820,1000
+Champex-Lac,life base,129.0,1477,540,660
+Trient,aid,147.0,1300,1180,1360
+Vallorcine,aid,156.0,1264,820,860
+La Flégère,refreshment,167.0,1877,890,285
+Chamonix (Finish),finish,174.0,1035,120,965
