@@ -5,6 +5,7 @@ export type Split = {
   seconds: number | null
   segmentSeconds: number | null
   segmentDeltaVsLeaderSeconds: number | null
+  segmentPctVsLeader: number | null
 }
 
 export type Runner = {

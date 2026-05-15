@@ -7,12 +7,18 @@ import {
   loadStoredRaceData,
   storeRaceData,
 } from './raceData'
-import { RunnersTable } from './RunnersTable'
+import { RunnersTable, type DeltaMode } from './RunnersTable'
 import { AidStationChart } from './AidStationChart'
 import { DataPage } from './DataPage'
 import type { RaceData } from './types'
 
 const SELECTED_KEY = 'selected-bibs-v1'
+const DELTA_MODE_KEY = 'table-delta-mode-v1'
+
+function readDeltaMode(): DeltaMode {
+  const v = localStorage.getItem(DELTA_MODE_KEY)
+  return v === 'time' || v === 'percent' ? v : 'percent'
+}
 
 type Page = 'table' | 'analysis' | 'data'
 
@@ -40,6 +46,7 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<Set<string>>(() => readSelected())
   const [page, setPage] = useState<Page>(pageFromHash)
+  const [deltaMode, setDeltaMode] = useState<DeltaMode>(readDeltaMode)
 
   useEffect(() => {
     const stored = loadStoredRaceData()
@@ -57,6 +64,10 @@ function App() {
   useEffect(() => {
     localStorage.setItem(SELECTED_KEY, JSON.stringify([...selected]))
   }, [selected])
+
+  useEffect(() => {
+    localStorage.setItem(DELTA_MODE_KEY, deltaMode)
+  }, [deltaMode])
 
   useEffect(() => {
     const handler = () => setPage(pageFromHash())
@@ -163,11 +174,33 @@ function App() {
         {loading && <p className="placeholder">Loading…</p>}
         {error && <p className="error">{error}</p>}
         {!loading && !error && raceData && page === 'table' && (
-          <RunnersTable
-            runners={runners}
-            selected={selected}
-            onToggle={toggleSelected}
-          />
+          <>
+            <div className="config-bar">
+              <div className="config-item">
+                <span className="config-label">Δ format</span>
+                <div className="segmented">
+                  <button
+                    className={`seg-btn ${deltaMode === 'percent' ? 'active' : ''}`}
+                    onClick={() => setDeltaMode('percent')}
+                  >
+                    %
+                  </button>
+                  <button
+                    className={`seg-btn ${deltaMode === 'time' ? 'active' : ''}`}
+                    onClick={() => setDeltaMode('time')}
+                  >
+                    Time
+                  </button>
+                </div>
+              </div>
+            </div>
+            <RunnersTable
+              runners={runners}
+              selected={selected}
+              onToggle={toggleSelected}
+              deltaMode={deltaMode}
+            />
+          </>
         )}
         {!loading && !error && raceData && page === 'analysis' && (
           <AidStationChart raceData={raceData} selected={selected} />

@@ -1,9 +1,12 @@
 import type { Runner, Split } from './types'
 
+export type DeltaMode = 'time' | 'percent'
+
 type Props = {
   runners: Runner[]
   selected: Set<string>
   onToggle: (bib: string) => void
+  deltaMode: DeltaMode
 }
 
 function runnerScoreDiff(runner: Runner): number | null {
@@ -32,25 +35,35 @@ function formatDelta(s: number | null): string {
   return `${sign}${m}:${String(sec).padStart(2, '0')}`
 }
 
-function deltaClass(d: number | null): string {
+function deltaClass(d: number | null, threshold: number): string {
   if (d === null) return ''
-  if (d > 1) return 'pct-worse'
-  if (d < -1) return 'pct-better'
+  if (d > threshold) return 'pct-worse'
+  if (d < -threshold) return 'pct-better'
   return ''
 }
 
-function SplitCell({ split }: { split: Split }) {
+function formatPercent(p: number | null): string {
+  if (p === null) return '—'
+  if (Math.abs(p) < 0.05) return '0.0%'
+  return `${p > 0 ? '+' : ''}${p.toFixed(1)}%`
+}
+
+function SplitCell({ split, deltaMode }: { split: Split; deltaMode: DeltaMode }) {
+  const showPercent = deltaMode === 'percent'
+  const deltaValue = showPercent ? split.segmentPctVsLeader : split.segmentDeltaVsLeaderSeconds
+  const deltaText = showPercent
+    ? formatPercent(split.segmentPctVsLeader)
+    : formatDelta(split.segmentDeltaVsLeaderSeconds)
+  const threshold = showPercent ? 0.1 : 1
   return (
     <td className="split-cell">
       <div className="split-time">{formatDuration(split.segmentSeconds)}</div>
-      <div className={`split-pct ${deltaClass(split.segmentDeltaVsLeaderSeconds)}`}>
-        {formatDelta(split.segmentDeltaVsLeaderSeconds)}
-      </div>
+      <div className={`split-pct ${deltaClass(deltaValue, threshold)}`}>{deltaText}</div>
     </td>
   )
 }
 
-export function RunnersTable({ runners, selected, onToggle }: Props) {
+export function RunnersTable({ runners, selected, onToggle, deltaMode }: Props) {
   const splitHeaders = runners[0]?.splits ?? []
   const showUtmbCols = runners.some(
     (r) => r.raceScore !== null && r.utmbIndexRaceDay !== null,
@@ -112,7 +125,7 @@ export function RunnersTable({ runners, selected, onToggle }: Props) {
                   </td>
                 )}
                 {r.splits.map((s, i) => (
-                  <SplitCell key={i} split={s} />
+                  <SplitCell key={i} split={s} deltaMode={deltaMode} />
                 ))}
               </tr>
             )

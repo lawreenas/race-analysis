@@ -84,6 +84,10 @@ export function parseRunners(csvText: string): Runner[] {
       const refSeg = referenceSegments[idx]
       const segmentDeltaVsLeaderSeconds =
         segmentSeconds !== null && refSeg !== null ? segmentSeconds - refSeg : null
+      const segmentPctVsLeader =
+        segmentSeconds !== null && refSeg !== null && refSeg > 0
+          ? ((segmentSeconds - refSeg) / refSeg) * 100
+          : null
       return {
         name: a.name,
         distanceKm: a.distanceKm,
@@ -91,6 +95,7 @@ export function parseRunners(csvText: string): Runner[] {
         seconds,
         segmentSeconds,
         segmentDeltaVsLeaderSeconds,
+        segmentPctVsLeader,
       }
     })
 
