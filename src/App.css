@@ -189,6 +189,32 @@
   margin-top: 4px;
 }
 
+.swatch-elev {
+  background: #1c2a1f;
+  border: 1px solid #3f5a44;
+}
+
+.chart-empty {
+  color: #777;
+  font-size: 0.9rem;
+  padding: 1.5rem 1rem;
+  text-align: center;
+}
+
+.chart-empty-overlay {
+  position: absolute;
+  inset: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #aaa;
+  font-size: 0.95rem;
+  text-align: center;
+  background: rgba(12, 12, 12, 0.65);
+  border-radius: 6px;
+  pointer-events: none;
+}
+
 .runners-table-wrap {
   overflow: auto;
   max-height: calc(100vh - 11rem);

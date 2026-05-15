@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Runner } from './types'
+import { loadElevationProfile, type ElevationPoint } from './loadElevation'
 
 const COLORS = [
   '#60a5fa',
@@ -45,6 +46,13 @@ export function AidStationChart({ runners, selected }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(1200)
   const [hover, setHover] = useState<Hover>(null)
+  const [elevation, setElevation] = useState<ElevationPoint[]>([])
+
+  useEffect(() => {
+    loadElevationProfile()
+      .then(setElevation)
+      .catch((e) => console.warn('Elevation load failed:', e))
+  }, [])
 
   useEffect(() => {
     if (!wrapRef.current) return
@@ -63,14 +71,7 @@ export function AidStationChart({ runners, selected }: Props) {
   const aidStations = tom.splits
   const selectedRunners = runners.filter((r) => selected.has(r.bib) && r.bib !== tom.bib)
   const tomSelected = selected.has(tom.bib)
-
-  if (selectedRunners.length === 0 && !tomSelected) {
-    return (
-      <div ref={wrapRef} className="chart-wrap chart-empty">
-        Select runners (click on a row) to plot their time delta vs Tom EVANS at each aid station.
-      </div>
-    )
-  }
+  const lastKm = aidStations.length > 0 ? aidStations[aidStations.length - 1].distanceKm : 175
 
   const series = selectedRunners.map((r, idx) => {
     const points = r.splits
@@ -78,9 +79,17 @@ export function AidStationChart({ runners, selected }: Props) {
         const tomSec = aidStations[i]?.seconds ?? null
         const runnerSec = s.seconds
         if (tomSec === null || runnerSec === null) return null
-        return { idx: i, delta: runnerSec - tomSec, timeStr: s.timeStr }
+        return {
+          idx: i,
+          distanceKm: s.distanceKm,
+          delta: runnerSec - tomSec,
+          timeStr: s.timeStr,
+        }
       })
-      .filter((p): p is { idx: number; delta: number; timeStr: string } => p !== null)
+      .filter(
+        (p): p is { idx: number; distanceKm: number; delta: number; timeStr: string } =>
+          p !== null,
+      )
     return { runner: r, points, color: COLORS[idx % COLORS.length] }
   })
 
@@ -96,21 +105,51 @@ export function AidStationChart({ runners, selected }: Props) {
   minDelta -= range * 0.08
   maxDelta += range * 0.08
 
-  const height = 340
-  const m = { top: 16, right: 24, bottom: 110, left: 70 }
+  const height = 380
+  const m = { top: 16, right: 60, bottom: 110, left: 70 }
   const innerW = width - m.left - m.right
   const innerH = height - m.top - m.bottom
+  const innerBottom = m.top + innerH
 
-  const xPos = (i: number) =>
-    m.left + (aidStations.length > 1 ? (i / (aidStations.length - 1)) * innerW : innerW / 2)
+  const xPos = (km: number) => m.left + (km / lastKm) * innerW
   const yPos = (delta: number) =>
     m.top + innerH - ((delta - minDelta) / (maxDelta - minDelta || 1)) * innerH
+
+  let elevMin = 0
+  let elevMax = 1
+  if (elevation.length > 0) {
+    elevMin = Math.min(...elevation.map((e) => e.elevationM))
+    elevMax = Math.max(...elevation.map((e) => e.elevationM))
+    const pad = (elevMax - elevMin) * 0.05
+    elevMin -= pad
+    elevMax += pad
+  }
+  const elevY = (e: number) =>
+    m.top + innerH - ((e - elevMin) / (elevMax - elevMin || 1)) * innerH
+
+  const elevAreaPath =
+    elevation.length > 0
+      ? `M ${xPos(elevation[0].distanceKm)} ${innerBottom} ` +
+        elevation
+          .map((p) => `L ${xPos(p.distanceKm)} ${elevY(p.elevationM)}`)
+          .join(' ') +
+        ` L ${xPos(elevation[elevation.length - 1].distanceKm)} ${innerBottom} Z`
+      : ''
 
   const tickStep = niceTimeStep((maxDelta - minDelta) / 6)
   const yTicks: number[] = []
   const tickStart = Math.ceil(minDelta / tickStep) * tickStep
   for (let v = tickStart; v <= maxDelta; v += tickStep) yTicks.push(v)
   if (!yTicks.some((t) => Math.abs(t) < 1e-9)) yTicks.push(0)
+
+  const elevTickStep = 500
+  const elevTicks: number[] = []
+  if (elevation.length > 0) {
+    const start = Math.ceil(elevMin / elevTickStep) * elevTickStep
+    for (let v = start; v <= elevMax; v += elevTickStep) elevTicks.push(v)
+  }
+
+  const empty = selectedRunners.length === 0 && !tomSelected
 
   let tooltip: {
     x: number
@@ -127,7 +166,7 @@ export function AidStationChart({ runners, selected }: Props) {
     const a = aidStations[hover.aidIdx]
     if (s && p && a) {
       tooltip = {
-        x: xPos(p.idx),
+        x: xPos(p.distanceKm),
         y: yPos(p.delta),
         name: `${s.runner.firstName} ${s.runner.lastName}`,
         aid: `${a.name} · ${a.distanceKm.toFixed(1)} km`,
@@ -141,16 +180,40 @@ export function AidStationChart({ runners, selected }: Props) {
   return (
     <div ref={wrapRef} className="chart-wrap">
       <svg width={width} height={height} className="chart-svg">
+        {elevAreaPath && (
+          <>
+            <path d={elevAreaPath} fill="#1c2a1f" opacity={0.9} />
+            <path
+              d={elevAreaPath.replace(/^M [^ ]+ [^ ]+ /, 'M ').replace(/ L [^ ]+ [^ ]+ Z$/, '')}
+              fill="none"
+              stroke="#3f5a44"
+              strokeWidth={1}
+            />
+          </>
+        )}
+
+        {aidStations.map((a, i) => (
+          <line
+            key={`vline-${i}`}
+            x1={xPos(a.distanceKm)}
+            x2={xPos(a.distanceKm)}
+            y1={m.top}
+            y2={innerBottom}
+            stroke="#262626"
+            strokeDasharray="1,3"
+          />
+        ))}
+
         {yTicks.map((t) => {
           const isZero = Math.abs(t) < 1e-9
           return (
-            <g key={t}>
+            <g key={`yt-${t}`}>
               <line
                 x1={m.left}
                 x2={width - m.right}
                 y1={yPos(t)}
                 y2={yPos(t)}
-                stroke={isZero ? '#888' : '#222'}
+                stroke={isZero ? '#888' : '#1f1f1f'}
                 strokeDasharray={isZero ? '' : '2,3'}
               />
               <text
@@ -166,9 +229,40 @@ export function AidStationChart({ runners, selected }: Props) {
           )
         })}
 
+        {elevTicks.map((t) => (
+          <text
+            key={`et-${t}`}
+            x={width - m.right + 6}
+            y={elevY(t) + 4}
+            textAnchor="start"
+            fill="#5b7a62"
+            fontSize="10"
+          >
+            {t} m
+          </text>
+        ))}
+
+        <text
+          x={m.left - 8}
+          y={m.top - 4}
+          textAnchor="end"
+          fill="#888"
+          fontSize="10"
+        >
+          vs Tom
+        </text>
+        <text
+          x={width - m.right + 6}
+          y={m.top - 4}
+          textAnchor="start"
+          fill="#5b7a62"
+          fontSize="10"
+        >
+          elev
+        </text>
+
         {aidStations.map((a, i) => (
-          <g key={i} transform={`translate(${xPos(i)}, ${height - m.bottom + 8})`}>
-            <line x1={0} x2={0} y1={-4} y2={-innerH - 4} stroke="#1a1a1a" />
+          <g key={`xl-${i}`} transform={`translate(${xPos(a.distanceKm)}, ${innerBottom + 8})`}>
             <g transform="rotate(45)">
               <text fill="#888" fontSize="10" textAnchor="start">
                 {a.name} ({a.distanceKm.toFixed(1)} km)
@@ -180,7 +274,7 @@ export function AidStationChart({ runners, selected }: Props) {
         {series.map(({ runner, points, color }) => {
           if (points.length === 0) return null
           const d = points
-            .map((p, i) => `${i === 0 ? 'M' : 'L'} ${xPos(p.idx)} ${yPos(p.delta)}`)
+            .map((p, i) => `${i === 0 ? 'M' : 'L'} ${xPos(p.distanceKm)} ${yPos(p.delta)}`)
             .join(' ')
           return (
             <g key={runner.bib}>
@@ -191,7 +285,7 @@ export function AidStationChart({ runners, selected }: Props) {
                 return (
                   <circle
                     key={p.idx}
-                    cx={xPos(p.idx)}
+                    cx={xPos(p.distanceKm)}
                     cy={yPos(p.delta)}
                     r={isHovered ? 5 : 3}
                     fill={color}
@@ -207,6 +301,13 @@ export function AidStationChart({ runners, selected }: Props) {
           )
         })}
       </svg>
+
+      {empty && (
+        <div className="chart-empty-overlay">
+          Select runners (click on a row in the Table page) to plot their time delta vs Tom EVANS
+          at each aid station.
+        </div>
+      )}
 
       {tooltip && (
         <div
@@ -233,6 +334,10 @@ export function AidStationChart({ runners, selected }: Props) {
         <span className="legend-item">
           <span className="swatch swatch-ref" />
           Tom EVANS (reference)
+        </span>
+        <span className="legend-item">
+          <span className="swatch swatch-elev" />
+          Elevation profile
         </span>
         {series.map(({ runner, color }) => (
           <span className="legend-item" key={runner.bib}>

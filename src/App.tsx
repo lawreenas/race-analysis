@@ -7,11 +7,11 @@ import type { Runner } from './types'
 
 const STORAGE_KEY = 'utmb-selected-bibs'
 
-type Page = 'table' | 'chart'
+type Page = 'table' | 'analysis'
 
 function pageFromHash(): Page {
   const h = window.location.hash.replace(/^#\/?/, '')
-  return h === 'chart' ? 'chart' : 'table'
+  return h === 'analysis' || h === 'analysis' ? 'analysis' : 'table'
 }
 
 function readSelected(): Set<string> {
@@ -79,10 +79,10 @@ function App() {
               Table
             </button>
             <button
-              className={`nav-btn ${page === 'chart' ? 'active' : ''}`}
-              onClick={() => navigate('chart')}
+              className={`nav-btn ${page === 'analysis' ? 'active' : ''}`}
+              onClick={() => navigate('analysis')}
             >
-              Chart
+              Analysis
             </button>
           </nav>
         </div>
@@ -110,7 +110,7 @@ function App() {
         {!loading && !error && page === 'table' && (
           <RunnersTable runners={runners} selected={selected} onToggle={toggleSelected} />
         )}
-        {!loading && !error && page === 'chart' && (
+        {!loading && !error && page === 'analysis' && (
           <AidStationChart runners={runners} selected={selected} />
         )}
       </main>
