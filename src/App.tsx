@@ -17,7 +17,7 @@ const DELTA_MODE_KEY = 'table-delta-mode-v1'
 
 function readDeltaMode(): DeltaMode {
   const v = localStorage.getItem(DELTA_MODE_KEY)
-  return v === 'time' || v === 'percent' || v === 'score' ? v : 'percent'
+  return v === 'time' || v === 'percent' ? v : 'percent'
 }
 
 type Page = 'table' | 'analysis' | 'data'
@@ -190,13 +190,6 @@ function App() {
                     onClick={() => setDeltaMode('time')}
                   >
                     Time
-                  </button>
-                  <button
-                    className={`seg-btn ${deltaMode === 'score' ? 'active' : ''}`}
-                    onClick={() => setDeltaMode('score')}
-                    title="Implied segment score vs runner's overall race score"
-                  >
-                    Score
                   </button>
                 </div>
               </div>
